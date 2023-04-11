@@ -1,5 +1,4 @@
 import os
-from typing import Annotated
 
 from fastapi import FastAPI, Body
 
@@ -16,7 +15,7 @@ async def root():
 
 
 @app.post("/claims")
-async def gen_question_claims(text: Annotated[str, Body()], lang: Annotated[str, Body()] = 'he'):
+async def gen_question_claims(text: str = Body(), lang: str = Body()):
 
     # create clients
     gpt_client = GPTClient(api_key=os.environ['OPENAI_KEY'])
