@@ -40,13 +40,9 @@ class TestAPI(TestCase):
         # get response data
         api_response = response.json()
 
-        # verify languages
-        self.assertIn('en', api_response, msg="English version should be in response")
-        self.assertIn(TEST_LANG, api_response, msg=f'Target language "{TEST_LANG}" should be in response')
-
         # verify structure
         for key in ('claims', 'questions'):
-            self.assertIn(key, api_response[TEST_LANG], msg=f'Key "{key}" should be in response')
-            self.assertTrue(isinstance(api_response[TEST_LANG][key], List), msg=f'Key "{key}" should be a List')
-            self.assertLessEqual(1, len(api_response[TEST_LANG][key]), msg=f'List "{key}" should have at least one item')
-            self.assertTrue(all(isinstance(v, str) for v in api_response[TEST_LANG][key]), msg=f'Items in list "{key}" should be strings')
+            self.assertIn(key, api_response, msg=f'Key "{key}" should be in response')
+            self.assertTrue(isinstance(api_response[key], List), msg=f'Key "{key}" should be a List')
+            self.assertLessEqual(1, len(api_response[key]), msg=f'List "{key}" should have at least one item')
+            self.assertTrue(all(isinstance(v, str) for v in api_response[key]), msg=f'Items in list "{key}" should be strings')
