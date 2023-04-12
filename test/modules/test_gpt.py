@@ -24,9 +24,9 @@ class TestGPT(TestCase):
 
         self.client = GPTClient(api_key=os.environ['OPENAI_KEY'])
 
-    def test_translate_text(self):
+    def test_query(self):
 
-        gpt_response = self.client.query_chat_completion(text=self.TEST_TEXT)
+        gpt_response = self.client.query_claims_questions(text=self.TEST_TEXT)
         self.assertIsNotNone(gpt_response)
 
         # assert response structure
@@ -36,3 +36,9 @@ class TestGPT(TestCase):
             self.assertTrue(isinstance(gpt_response[key], List), msg="Key should contain a list")
             self.assertLessEqual(1, len(gpt_response[key]), msg="List should have at least one item")
             self.assertTrue(all(isinstance(v, str) for v in gpt_response[key]), msg="Items in the list should be strings")
+
+    def test_stream(self):
+
+        stream_gen = self.client.stream_claims_questions(text=self.TEST_TEXT)
+        for out in stream_gen:
+            print(out)

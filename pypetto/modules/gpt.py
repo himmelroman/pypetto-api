@@ -1,12 +1,10 @@
 import json
+import threading
+
 import openai
 
-CLAIMS_PROMPT = \
-    "You are an assistant for analytical and critical thinking, helping people to detect and challenge populism.\n" \
-    "Your task is to extract the main claims made in the text, and generate 5 questions based on these claims.\n" \
-    "The questions should demand details of plans and decisions that stem from the claims.\n" \
-    "Output only JSON, an object with two lists, one list with the claims named \"claims\" and one with the questions named \"questions\".\n" \
-    "Consider the following text:\n{}\n"
+from pypetto.resources.gpt_prompt import *
+from pypetto.modules.token_stream_parser import TokenStreamParser
 
 
 class GPTClient:
@@ -23,20 +21,79 @@ class GPTClient:
         self.frequency_penalty = 0
         self.presence_penalty = 0
 
-    def query_chat_completion(self, text):
+        # streaming in background
+        self._stream_reader_thread = None
+        self._stream_token_parser = None
+
+    def query_claims_questions(self, text):
+
+        # GPT request
+        response = self._build_claims_questions_request(text, PROMPT_OUTPUT_QUERY, stream=False)
+
+        # return parse response
+        return self._parse_full_json_response(response)
+
+    def stream_claims_questions(self, text):
+
+        # GPT request
+        response = self._build_claims_questions_request(text, PROMPT_OUTPUT_STREAM, stream=True)
+
+        # init token stream parser
+        self._stream_token_parser = TokenStreamParser(item_key_re=PROMPT_OUTPUT_STREAM_REGEX, item_stop_char='{')
+
+        # start reader thread
+        self._stream_reader_thread = threading.Thread(target=self._stream_reader_thread_func, args=(response,))
+        self._stream_reader_thread.start()
+
+        # return result generator
+        return self._stream_token_parser.output_gen()
+
+    def _stream_reader_thread_func(self, response):
+
+        # iterate response chunks
+        for chunk in response:
+
+            # parse chunk
+            chunk_data, finish_reason = self._parse_stream_chunk_response(chunk)
+
+            # push new text to parser
+            if chunk_data:
+                self._stream_token_parser.feed(chunk_data)
+
+        # mark EOS
+        self._stream_token_parser.mark_eos()
+
+    def _build_claims_questions_request(self, text, output_prompt, stream: bool):
 
         # build request
-        completion = openai.ChatCompletion.create(
+        response = openai.ChatCompletion.create(
             model=self.model,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             frequency_penalty=self.frequency_penalty,
             presence_penalty=self.presence_penalty,
             messages=[
-                {"role": "system", "content": "You are an assistant for critical thinking."},
-                {"role": "user", "content": CLAIMS_PROMPT},
+                {"role": "system", "content": PROMPT_ROLE},
+                {"role": "user", "content": PROMPT_ROLE + PROMPT_CLAIMS_QUESTIONS + output_prompt + PROMPT_CLAIMS_QUESTIONS_ENDING},
                 {"role": "user", "content": text},
-            ]
+            ],
+            stream=stream
         )
 
-        return json.loads(completion['choices'][0]['message']['content'])
+        return response
+
+    @staticmethod
+    def _parse_full_json_response(chat_completion_response):
+
+        # parse json
+        return json.loads(chat_completion_response['choices'][0]['message']['content'])
+
+    @staticmethod
+    def _parse_stream_chunk_response(stream_chunk):
+
+        # check if any content arrived
+        if 'content' not in stream_chunk['choices'][0]['delta']:
+            return None, stream_chunk['choices'][0]['finish_reason']
+
+        # extract content and finish reason
+        return stream_chunk['choices'][0]['delta']['content'], stream_chunk['choices'][0]['finish_reason']
