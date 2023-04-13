@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Stream</title>
+</head>
+<script>
+
+    const regex = /{.*?}/gm;
+
+    function parse_event_items(event) {
+
+        // result
+        const item_list = Array();
+
+        let m;
+        while ((m = regex.exec(event)) !== null) {
+
+            // This is necessary to avoid infinite loops with zero-width matches
+            if (m.index === regex.lastIndex) {
+                regex.lastIndex++;
+            }
+
+            // The result can be accessed through the `m`-variable.
+            m.forEach((match, groupIndex) => {
+                item_list.push(JSON.parse(match));
+                // console.log(`Found match, group ${groupIndex}: ${match}`);
+            });
+        }
+
+        return item_list;
+}
+
+</script>
+<script>
+
+    async function display_stream() {
+
+        // textareas
+        const input_txt = document.getElementById("input_txt");
+        const output_txt = document.getElementById("output_txt");
+
+        const response = await fetch(
+            "https://pypetto-api.onrender.com/api/claims_stream",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({"text": input_txt.value, "lang": "en"})
+            }
+        );
+
+        // create stream reader
+        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+
+        // loop while response is still streaming
+        let cur_item_key = null;
+        while (true) {
+
+            // read the next event
+            const {value, done} = await reader.read();
+            // console.log(`Event ${value}`);
+
+            // break loop if stream has finished
+            if (done) break;
+
+            // parse value for json items
+            // (sometimes slow network can cause two items to arrive together)
+            const item_array = parse_event_items(value);
+
+            // iterate items
+            item_array.forEach((item) => {
+
+                // build item key
+                const event_key = item['type'] + item['index'];
+                // console.log(`ItemKey ${event_key}, CurrKey ${cur_item_key}`);
+
+                // if key changed
+                if (event_key !== cur_item_key) {
+                    output_txt.value += '\n' + event_key + ' : ';
+                    cur_item_key = event_key
+                }
+                output_txt.value += item['text'];
+            })
+            // console.log('Response stream ended');
+        }
+    }
+</script>
+<body>
+    <div>Input Text:</div>
+    <textarea id="input_txt" style="width: 60%;" rows="10"></textarea>
+    <br><br>
+    <input type="button" onclick="display_stream()" value="Stream Response!"/>
+    <br><br>
+    <div>Output Text:</div>
+    <textarea id="output_txt" style="width: 60%;" rows="30"></textarea>
+</body>
+</html>
